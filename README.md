@@ -1,10 +1,11 @@
 # oxhq/pliego-php
 
 Experimental PHP 8.3+ bridge for one Pliego process per document. See the
-[Pliego repository](https://github.com/oxhq/pliego) before production use.
+[alpha support profile](https://github.com/oxhq/pliego/blob/main/docs/pliego/support-profile.md)
+before production use.
 
 ```sh
-composer require oxhq/pliego-php:^0.1.0-alpha.1
+composer require oxhq/pliego-php:^0.1.0-alpha.2
 composer test
 ```
 
