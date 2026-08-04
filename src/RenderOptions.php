@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Pliego\Php\Experimental;
+namespace Pliego\Php;
 
 use InvalidArgumentException;
 
 /**
- * Experimental one-shot CLI options. This is not the future daemon protocol.
+ * Options for one-shot CLI rendering, not a persistent daemon protocol.
  */
 final readonly class RenderOptions
 {
@@ -25,8 +25,8 @@ final readonly class RenderOptions
     public function __construct(
         string $locale = 'en-US',
         string $timezone = 'UTC',
-        string $pageSize = '612x792',
-        string $pageMargins = '36,36,36,36',
+        string $pageSize = '816x1056',
+        string $pageMargins = '48,48,48,48',
         array $allowedHttpRoots = [],
     ) {
         foreach ([
