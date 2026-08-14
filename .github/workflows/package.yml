@@ -19,6 +19,15 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
+      - name: Verify release tag matches package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '\r\n' < VERSION)
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match package version v$version" >&2
+            exit 1
+          fi
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress
       - run: composer test
