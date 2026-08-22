@@ -12,10 +12,12 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
         with:
           php-version: '8.3'
           coverage: none
@@ -31,3 +33,93 @@ jobs:
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress
       - run: composer test
+      - name: Test the exact public native release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '\r\n' < VERSION)
+          bundle="pliego-${version}-linux-x86_64"
+          archive="${bundle}.tar.gz"
+          release_url="https://github.com/oxhq/pliego/releases/download/v${version}"
+          release_dir="$RUNNER_TEMP/pliego-public-release"
+          unpacked="$RUNNER_TEMP/pliego-public-runtime"
+          mkdir "$release_dir" "$unpacked"
+
+          if ! curl --fail-with-body --location --retry 3 --retry-all-errors \
+            --output "$release_dir/$archive" "$release_url/$archive"
+          then
+            echo "::error::Public native Pliego v$version must exist before the coordinated PHP package can pass." >&2
+            exit 1
+          fi
+          curl --fail-with-body --location --retry 3 --retry-all-errors \
+            --output "$release_dir/$archive.sha256" "$release_url/$archive.sha256"
+          curl --fail-with-body --location --retry 3 --retry-all-errors \
+            --output "$release_dir/runtimes.json" "$release_url/runtimes.json"
+
+          PLIEGO_RELEASE_VERSION="$version" \
+          PLIEGO_RELEASE_ARCHIVE="$release_dir/$archive" \
+          PLIEGO_RELEASE_CHECKSUM="$release_dir/$archive.sha256" \
+          PLIEGO_RELEASE_MANIFEST="$release_dir/runtimes.json" \
+          PLIEGO_RELEASE_DESTINATION="$unpacked" \
+            python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import tarfile
+
+          version = os.environ["PLIEGO_RELEASE_VERSION"]
+          archive = pathlib.Path(os.environ["PLIEGO_RELEASE_ARCHIVE"])
+          checksum = pathlib.Path(os.environ["PLIEGO_RELEASE_CHECKSUM"])
+          manifest = json.loads(pathlib.Path(os.environ["PLIEGO_RELEASE_MANIFEST"]).read_text(encoding="utf-8"))
+          destination = pathlib.Path(os.environ["PLIEGO_RELEASE_DESTINATION"])
+          bundle = f"pliego-{version}-linux-x86_64"
+          prefix = f"{bundle}/"
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+          if checksum.read_text(encoding="ascii").split() != [digest, archive.name]:
+              raise SystemExit("public release checksum sidecar does not bind the downloaded archive")
+          if (
+              manifest.get("schema") != 1
+              or manifest.get("version") != version
+              or manifest.get("api") != 2
+              or manifest.get("release_ready") is not True
+              or list(manifest.get("assets", {}))
+              != ["linux-x86_64", "windows-x86_64", "macos-x86_64", "macos-aarch64"]
+          ):
+              raise SystemExit("public release manifest is not the finalized API 2 runtime set")
+          asset = manifest["assets"]["linux-x86_64"]
+          if asset.get("bytes") != archive.stat().st_size or asset.get("sha256") != digest:
+              raise SystemExit("public release manifest does not bind the downloaded Linux archive")
+
+          with tarfile.open(archive, "r:gz") as package:
+              members = package.getmembers()
+              unsupported = [member.name for member in members if not member.isfile() and not member.isdir()]
+              names = [member.name for member in members if member.isfile()]
+              if unsupported:
+                  raise SystemExit(f"public release archive has unsupported entries: {sorted(unsupported)}")
+              if len(names) != len(set(names)) or any(not name.startswith(prefix) for name in names):
+                  raise SystemExit("public release archive has an invalid root or duplicate paths")
+              files = sorted(name.removeprefix(prefix) for name in names)
+              if files != asset.get("files"):
+                  raise SystemExit("public release manifest inventory differs from the Linux archive")
+              if any(
+                  not path
+                  or "\\" in path
+                  or path.startswith("/")
+                  or any(segment in {"", ".", ".."} or ":" in segment for segment in path.split("/"))
+                  for path in files
+              ):
+                  raise SystemExit("public release archive has an unsafe path")
+              package.extractall(destination, filter="data")
+          PY
+
+          binary="$unpacked/$bundle/pliego"
+          test -f "$binary"
+          chmod +x "$binary"
+          version_stderr="$RUNNER_TEMP/pliego-public-version.stderr"
+          version_output=$("$binary" --version 2>"$version_stderr")
+          test ! -s "$version_stderr"
+          grep -Fx "pliego $version" <<<"$version_output"
+          grep -Fx "pliego-api 2" <<<"$version_output"
+          php tests/production_binary_test.php "$binary"
