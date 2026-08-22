@@ -28,13 +28,12 @@ final class InvocationException extends RuntimeException
             $exitCode !== 64
             || $stdout !== ''
             || $diagnostic === ''
-            || str_contains($diagnostic, "\n")
-            || str_contains($diagnostic, "\r")
-            || str_contains($diagnostic, "\0")
+            || preg_match('/[\x00-\x1F\x7F]/', $diagnostic) === 1
             || preg_match('//u', $diagnostic) !== 1
         ) {
             throw new UnexpectedValueException(
-                'API 2 invocation errors require exit 64, empty stdout, and one newline-terminated UTF-8 stderr line',
+                'API 2 invocation errors require exit 64, empty stdout, and one newline-terminated UTF-8 stderr line'
+                    .' without control characters',
             );
         }
 

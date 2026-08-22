@@ -330,6 +330,8 @@ foreach ([
     [64, '', 'missing newline'],
     [64, '', "two\nlines\n"],
     [64, '', "carriage return\r\n"],
+    [64, '', "escape sequence \x1B[31m\n"],
+    [64, '', "delete byte \x7F\n"],
     [64, '', "invalid utf8 \xFF\n"],
 ] as [$exitCode, $stdout, $stderr]) {
     api2Rejected(

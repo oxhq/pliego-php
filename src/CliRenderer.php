@@ -635,11 +635,12 @@ final class CliRenderer
 
             return $timings;
         }
-        if (file_put_contents(
+        $written = file_put_contents(
             $jobPath.DIRECTORY_SEPARATOR.self::BRIDGE_TIMINGS_FILE,
             $json,
             LOCK_EX,
-        ) === false) {
+        );
+        if ($written !== strlen($json)) {
             $timings['diagnostics']['retained'] = false;
         }
 
