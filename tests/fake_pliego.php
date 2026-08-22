@@ -2,7 +2,87 @@
 
 declare(strict_types=1);
 
+$engineStartedAt = hrtime(true);
+$engineTiming = static fn (int|float $totalMilliseconds): array => [
+    'schema' => 'pliego.engine-timings',
+    'version' => 1,
+    'unit' => 'milliseconds',
+    'measurement_boundary' => 'before_timings_artifact_write',
+    'total_ms' => $totalMilliseconds,
+];
 $mode = getenv('PLIEGO_DOCTOR_FAKE_MODE');
+
+if (($argv[1] ?? null) === '--contract-probe') {
+    $api2Mode = getenv('PLIEGO_API2_FAKE_MODE') ?: 'empty';
+    if ($api2Mode === 'slow-probe') {
+        usleep(1_100_000);
+    }
+    $profiles = $api2Mode === 'profile'
+        ? [['schema' => 'pliego.profile.test', 'version' => 1]]
+        : [];
+    $tuple = [
+        'api' => 2,
+        'input_manifest' => ['schema' => 'pliego.input-manifest', 'version' => 1],
+        'request' => ['schema' => 'pliego.render-request', 'version' => 1],
+        'result' => ['schema' => 'pliego.render-result', 'version' => 1],
+        'document_scene' => ['schema' => 'pliego.document-scene', 'version' => 1],
+        'bundle_manifest' => ['schema' => 'pliego.bundle-manifest', 'version' => 1],
+        'profiles' => $profiles,
+    ];
+    $contract = [
+        'schema' => 'pliego.runtime-contract',
+        'version' => 1,
+        'engine' => [
+            'name' => 'pliego',
+            'version' => '0.2.0-dev',
+            'api' => 2,
+            'source_commit' => str_repeat('1', 40),
+            'runtime' => [
+                'mode' => 'one-shot',
+                'target' => 'x86_64-unknown-linux-gnu',
+                'binary_sha256' => 'sha256:'.str_repeat('2', 64),
+                'servo_base' => str_repeat('3', 40),
+            ],
+        ],
+        'contracts' => in_array($api2Mode, ['available', 'profile'], true) ? [$tuple] : [],
+        'invocation' => [
+            'request_transport' => 'stdin-single-json',
+            'request_max_bytes' => 1_048_576,
+            'result_transport' => 'stdout-single-json',
+            'invocation_error_transport' => 'stderr-utf8-line',
+            'success_exit_code' => 0,
+            'failed_exit_code' => 1,
+            'invocation_error_exit_code' => 64,
+        ],
+    ];
+
+    if ($api2Mode === 'out-of-order') {
+        $contract = [
+            'version' => $contract['version'],
+            'schema' => $contract['schema'],
+            'engine' => $contract['engine'],
+            'contracts' => $contract['contracts'],
+            'invocation' => $contract['invocation'],
+        ];
+    } elseif ($api2Mode === 'unknown-member') {
+        $contract['build_path'] = 'C:/tmp/pliego.exe';
+    }
+
+    if ($api2Mode === 'exit-64') {
+        fwrite(STDERR, "invalid probe invocation\n");
+        exit(64);
+    } elseif ($api2Mode === 'adversarial-stderr') {
+        fwrite(STDERR, "first\r\nsecond\xFF".str_repeat('x', 300));
+        exit(65);
+    }
+    fwrite(STDOUT, json_encode($contract, JSON_UNESCAPED_SLASHES)."\n");
+    if ($api2Mode === 'stderr') {
+        fwrite(STDERR, "unexpected diagnostic\n");
+    } elseif ($api2Mode === 'second-frame') {
+        fwrite(STDOUT, "{}\n");
+    }
+    exit(0);
+}
 
 if (($argv[1] ?? null) === '--version') {
     if ($mode === 'incompatible') {
@@ -41,6 +121,7 @@ if (str_contains($html, 'FAIL_ENGINE')) {
     fwrite(STDOUT, json_encode([
         'status' => 'failed',
         'error' => ['code' => 'RESOURCE_DENIED', 'message' => 'synthetic denial'],
+        'engine_timings' => $engineTiming((hrtime(true) - $engineStartedAt) / 1_000_000),
     ])."\n");
     fwrite(STDERR, "pliego: RESOURCE_DENIED: synthetic denial\n");
     exit(1);
@@ -108,7 +189,7 @@ file_put_contents("{$artifacts}/pdf-structure.json", json_encode([
     ]],
 ], JSON_PRETTY_PRINT)."\n");
 
-fwrite(STDOUT, json_encode([
+$summary = [
     'status' => 'rendered',
     'engine' => 'pliego',
     'scene' => [
@@ -119,4 +200,19 @@ fwrite(STDOUT, json_encode([
     'artifacts' => $artifacts,
     'scene_artifact' => "{$artifacts}/scene.json",
     'pdf_structure' => "{$artifacts}/pdf-structure.json",
-])."\n");
+];
+if (str_contains($html, 'INVALID_ENGINE_TIMING_CONTRACT')) {
+    $summary['engine_timings'] = $engineTiming((hrtime(true) - $engineStartedAt) / 1_000_000);
+    $summary['engine_timings']['version'] = 2;
+} elseif (str_contains($html, 'INVALID_ENGINE_TIMINGS')) {
+    $summary['engine_timings'] = $engineTiming(-1);
+} elseif (str_contains($html, 'OUT_OF_BOUND_ENGINE_TIMINGS')) {
+    $summary['engine_timings'] = $engineTiming(60_000);
+} elseif (str_contains($html, 'LEGACY_ENGINE_TIMINGS')) {
+    $summary['phase_timings_ms'] = [
+        'total_engine' => (hrtime(true) - $engineStartedAt) / 1_000_000,
+    ];
+} elseif (!str_contains($html, 'NO_ENGINE_TIMINGS')) {
+    $summary['engine_timings'] = $engineTiming((hrtime(true) - $engineStartedAt) / 1_000_000);
+}
+fwrite(STDOUT, json_encode($summary)."\n");
