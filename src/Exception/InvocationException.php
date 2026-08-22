@@ -16,12 +16,20 @@ final class InvocationException extends RuntimeException
         public readonly int $exitCode,
         public readonly string $stdout,
         public readonly string $stderr,
+        public readonly ?string $jobPath,
+        public readonly ?string $runtimeJobPath,
         string $message,
     ) {
         parent::__construct($message);
     }
 
-    public static function fromProcessResult(int $exitCode, string $stdout, string $stderr): self
+    public static function fromProcessResult(
+        int $exitCode,
+        string $stdout,
+        string $stderr,
+        ?string $jobPath = null,
+        ?string $runtimeJobPath = null,
+    ): self
     {
         $diagnostic = str_ends_with($stderr, "\n") ? substr($stderr, 0, -1) : '';
         if (
@@ -37,6 +45,13 @@ final class InvocationException extends RuntimeException
             );
         }
 
-        return new self($exitCode, $stdout, $stderr, $diagnostic);
+        return new self(
+            $exitCode,
+            $stdout,
+            $stderr,
+            $jobPath,
+            $runtimeJobPath,
+            $diagnostic,
+        );
     }
 }
