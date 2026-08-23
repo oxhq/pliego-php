@@ -21,6 +21,14 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
+      - name: Install documented native runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            libegl1 \
+            libfontconfig1 \
+            libgl1-mesa-dri
       - name: Verify release tag matches package version
         shell: bash
         run: |
@@ -43,7 +51,9 @@ jobs:
           release_url="https://github.com/oxhq/pliego/releases/download/v${version}"
           release_dir="$RUNNER_TEMP/pliego-public-release"
           unpacked="$RUNNER_TEMP/pliego-public-runtime"
+          xdg_runtime_dir="$RUNNER_TEMP/pliego-public-xdg"
           mkdir "$release_dir" "$unpacked"
+          install -d -m 0700 "$xdg_runtime_dir"
 
           if ! curl --fail-with-body --location --retry 3 --retry-all-errors \
             --output "$release_dir/$archive" "$release_url/$archive"
@@ -122,4 +132,6 @@ jobs:
           test ! -s "$version_stderr"
           grep -Fx "pliego $version" <<<"$version_output"
           grep -Fx "pliego-api 2" <<<"$version_output"
-          php tests/production_binary_test.php "$binary"
+          env -u LIBGL_ALWAYS_SOFTWARE -u EGL_LOG_LEVEL -u MESA_LOG_LEVEL \
+            XDG_RUNTIME_DIR="$xdg_runtime_dir" \
+            php tests/production_binary_test.php "$binary"
