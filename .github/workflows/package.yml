@@ -135,3 +135,18 @@ jobs:
           env -u LIBGL_ALWAYS_SOFTWARE -u EGL_LOG_LEVEL -u MESA_LOG_LEVEL \
             XDG_RUNTIME_DIR="$xdg_runtime_dir" \
             php tests/production_binary_test.php "$binary"
+
+  windows-private-job-root:
+    name: Windows private API 2 job root
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - run: composer test:windows-job-root
