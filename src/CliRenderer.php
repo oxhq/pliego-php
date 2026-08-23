@@ -14,6 +14,8 @@ use RuntimeException;
 /**
  * One-render-per-process bridge. It deliberately does not model a persistent
  * daemon protocol.
+ *
+ * @deprecated since 0.3.0. Use DocumentEngine for the public API 2 contract.
  */
 final class CliRenderer
 {
