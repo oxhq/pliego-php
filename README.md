@@ -40,9 +40,9 @@ file_put_contents('/srv/my-app/storage/invoice.pdf', $result->bytes());
 
 The 0.3.2 client negotiates only Pliego's profile-null API 2 tuple. It requests no semantic or
 accessibility conformance profile and makes no PDF/UA claim. API 2 always denies live network access
-and host-font discovery. Fetch remote resources before the render and supply their bytes through
-`assets`. `allowedHttpRoots` remains only for the deprecated API 1 compatibility client and is
-rejected by `DocumentEngine` with a migration message.
+and host-font discovery. Fetch remote resources before the render, stage them as local files, and
+pass their paths through `InputAsset` entries in `assets`. `allowedHttpRoots` remains only for the
+deprecated API 1 compatibility client and is rejected by `DocumentEngine` with a migration message.
 
 The advertised v0.3.2 API 2 surface excludes link annotations, collapsed-table-border capture, and
 the current upstream Chart.js 4.5.1 fixture. Unsupported scene operations fail closed and do not
